@@ -1,13 +1,12 @@
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::StreamConfig;
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{io::stdin, sync::mpsc, thread, time};
+use std::{io::stdin, sync::mpsc, thread};
 
-fn construct_frequency_vec(sample_rate: f32, buffer_size: usize) -> Vec<f32> {
+fn construct_frequency_vec(sample_rate: f32, fft_buffer_size: usize) -> Vec<f32> {
     // Only return up to buffer_size/2 since FFT is symmetric.
-    (0..buffer_size / 2)
+    (0..fft_buffer_size / 2)
         .into_iter()
-        .map(|x| sample_rate * (x as f32) / (buffer_size as f32))
+        .map(|x| sample_rate * (x as f32) / (fft_buffer_size as f32))
         .collect()
 }
 
@@ -25,8 +24,9 @@ fn argmax_with_max(complex_slice: &[Complex<f32>]) -> (usize, f32) {
 }
 
 fn main() {
-    let host = cpal::default_host();
-    let device = host.default_input_device().expect("no input device");
+    let device = cpal::default_host()
+        .default_input_device()
+        .expect("no input device Plug in a mic.");
 
     let mut supported_configs_range = device
         .supported_input_configs()
@@ -37,22 +37,26 @@ fn main() {
         .expect("The input device does not have any supported configurations.")
         .with_max_sample_rate();
 
-    let num_channels = supported_config.config().channels as usize;
-    let sample_rate = supported_config.config().sample_rate.0 as f32;
 
     let (tx, rx) = mpsc::channel();
 
+    // TODO(0xff): clean up stream elegantly when done.
     let stream = device.build_input_stream(
         &supported_config.config(),
         move |data: &[f32], _: &cpal::InputCallbackInfo| {
             tx.send(data.to_vec())
                 .expect("Receiver hung up on sender :(");
         },
+        // TOOD(0xff): Actually handle errors.
         |err| {},
         None,
     );
 
+    let num_channels = supported_config.config().channels as usize;
+    let sample_rate = supported_config.config().sample_rate.0 as f32;
+
     thread::spawn(move || {
+        // TODO(0xff): Programmatically collect BUFFER_SIZE.
         const BUFFER_SIZE: usize = 512;
         const NUM_BUFFERS: usize = 8;
 
@@ -80,8 +84,11 @@ fn main() {
             if buffer_num == 0 {
                 fft.process(&mut complex_buffer);
                 // Symmetric, only need to take first half of buffer.
+                // TODO(0xff): Replace discrete max with interpolated value
                 let (max_index, max_norm) =
                     argmax_with_max(&complex_buffer[0..BUFFER_SIZE * NUM_BUFFERS / 2]);
+                // TODO(0xff): Replace this print output with visual feedback with
+                // respect to musical notes.
                 println!(
                     "freq: {}, max_index: {}, max_norm: {}",
                     freq_vec[max_index], max_index, max_norm
@@ -89,6 +96,5 @@ fn main() {
             }
         }
     });
-    let mut input = String::new();
-    stdin().read_line(&mut input).expect("Degenerate input");
+    stdin().read_line(&mut String::new()).expect("Degenerate input");
 }
