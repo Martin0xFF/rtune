@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 cpal = "0.15.2"
 rustfft = "6.1.0"
+termion = "2.0.3"

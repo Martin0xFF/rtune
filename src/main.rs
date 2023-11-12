@@ -1,6 +1,9 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{io::stdin, io::stdout, io::BufWriter, io::Write, sync::mpsc, thread};
+use std::io::Read;
+use std::time::Duration;
+use std::{io::stdin, io::stdout, io::BufWriter, io::Write, str, sync::mpsc, thread};
+use termion::terminal_size;
 
 fn construct_frequency_vec(sample_rate: f32, fft_buffer_size: usize) -> Vec<f32> {
     // Only return up to buffer_size/2 since FFT is symmetric.
@@ -24,10 +27,8 @@ fn argmax_with_max(complex_slice: &[Complex<f32>]) -> (usize, f32) {
 }
 
 fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
-
-    // TOOD(0xff): Make this dynamic to window size.
-    let width = 100;
-    let height = 40;
+    let dimensions = terminal_size().expect("Failed to get terminal size.");
+    let (width, height) = (dimensions.0 as usize, dimensions.1 as usize);
 
     // TODO(0xff): Determine a good mapping from fft result value to draw
     // height.
@@ -35,19 +36,15 @@ fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
 
     let chunk_size = complex_slice.len() / width;
 
-    let mut writer = BufWriter::with_capacity((width + 1) * height, stdout());
+    let mut writer = BufWriter::with_capacity((width + 1) * height + 1, stdout());
     let bins: Vec<f32> = complex_slice
         .chunks(chunk_size)
         .into_iter()
         .map(|x| x.iter().fold(0.0, |accum, x| accum + x.norm()))
         .collect();
 
-    writer
-        .write(b"-------\n")
-        .expect("Failed to write new line.");
-
-    for i in 0..height {
-        for j in 0..width {
+    for i in (0..height).rev() {
+        for j in 0..(width) {
             if (i as f32 * scale) < bins[j] {
                 writer.write(b"#").expect("Failed to write hash.");
             } else {
@@ -129,12 +126,11 @@ fn main() {
                 // std::io::stdout().flush().expect("Failed to Flush.");
                 print_spectrum(
                     &freq_vec,
-                    &complex_buffer[0..(BUFFER_SIZE * NUM_BUFFERS / 20)],
+                    &complex_buffer[0..(BUFFER_SIZE * NUM_BUFFERS / 12)],
                 )
             }
         }
     });
-    print!("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
     std::io::stdout().flush().expect("Failed to Flush.");
     stdin()
         .read_line(&mut String::new())
