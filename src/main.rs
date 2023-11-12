@@ -33,7 +33,6 @@ fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
     // TODO(0xff): Determine a good mapping from fft result value to draw
     // height.
     let scale: f32 = 3.0;
-
     let chunk_size = complex_slice.len() / width;
 
     let mut writer = BufWriter::with_capacity((width + 1) * height + 1, stdout());
@@ -44,12 +43,9 @@ fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
         .collect();
 
     for i in (0..height).rev() {
-        for j in 0..(width) {
-            if (i as f32 * scale) < bins[j] {
-                writer.write(b"#").expect("Failed to write hash.");
-            } else {
-                writer.write(b" ").expect("Failed to write space.");
-            }
+        for j in 0..width {
+            let c = if (i as f32 * scale) < bins[j] {b"#"} else {b" "};
+            writer.write(c).expect("Failed to write space.");
         }
         writer.write(b"\n").expect("Failed to write new line.");
     }
