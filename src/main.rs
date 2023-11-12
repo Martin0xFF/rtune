@@ -24,8 +24,13 @@ fn argmax_with_max(complex_slice: &[Complex<f32>]) -> (usize, f32) {
 }
 
 fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
+
+    // TOOD(0xff): Make this dynamic to window size.
     let width = 100;
     let height = 40;
+
+    // TODO(0xff): Determine a good mapping from fft result value to draw
+    // height.
     let scale: f32 = 3.0;
 
     let chunk_size = complex_slice.len() / width;
@@ -122,7 +127,10 @@ fn main() {
                 // respect to musical notes.
                 // print!("freq: {}\r", freq_vec[max_index]);
                 // std::io::stdout().flush().expect("Failed to Flush.");
-                print_spectrum(&freq_vec, &complex_buffer[0..(BUFFER_SIZE * NUM_BUFFERS / 20)])
+                print_spectrum(
+                    &freq_vec,
+                    &complex_buffer[0..(BUFFER_SIZE * NUM_BUFFERS / 20)],
+                )
             }
         }
     });
