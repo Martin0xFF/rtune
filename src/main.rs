@@ -1,6 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{io::stdin, sync::mpsc, thread};
+use std::{io::stdin, io::stdout, io::BufWriter, io::Write, sync::mpsc, thread};
 
 fn construct_frequency_vec(sample_rate: f32, fft_buffer_size: usize) -> Vec<f32> {
     // Only return up to buffer_size/2 since FFT is symmetric.
@@ -23,6 +23,38 @@ fn argmax_with_max(complex_slice: &[Complex<f32>]) -> (usize, f32) {
     )
 }
 
+fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
+    let width = 100;
+    let height = 40;
+    let scale: f32 = 3.0;
+
+    let chunk_size = complex_slice.len() / width;
+
+    let mut writer = BufWriter::with_capacity((width + 1) * height, stdout());
+    let bins: Vec<f32> = complex_slice
+        .chunks(chunk_size)
+        .into_iter()
+        .map(|x| x.iter().fold(0.0, |accum, x| accum + x.norm()))
+        .collect();
+
+    writer
+        .write(b"-------\n")
+        .expect("Failed to write new line.");
+
+    for i in 0..height {
+        for j in 0..width {
+            if (i as f32 * scale) < bins[j] {
+                writer.write(b"#").expect("Failed to write hash.");
+            } else {
+                writer.write(b" ").expect("Failed to write space.");
+            }
+        }
+        writer.write(b"\n").expect("Failed to write new line.");
+    }
+    writer.write(b"\r").expect("Failed to write new line.");
+    writer.flush().expect("Failed to flush.");
+}
+
 fn main() {
     let device = cpal::default_host()
         .default_input_device()
@@ -36,7 +68,6 @@ fn main() {
         .next()
         .expect("The input device does not have any supported configurations.")
         .with_max_sample_rate();
-
 
     let (tx, rx) = mpsc::channel();
 
@@ -58,7 +89,7 @@ fn main() {
     thread::spawn(move || {
         // TODO(0xff): Programmatically collect BUFFER_SIZE.
         const BUFFER_SIZE: usize = 512;
-        const NUM_BUFFERS: usize = 8;
+        const NUM_BUFFERS: usize = 4;
 
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(BUFFER_SIZE * NUM_BUFFERS);
@@ -89,12 +120,15 @@ fn main() {
                     argmax_with_max(&complex_buffer[0..BUFFER_SIZE * NUM_BUFFERS / 2]);
                 // TODO(0xff): Replace this print output with visual feedback with
                 // respect to musical notes.
-                println!(
-                    "freq: {}, max_index: {}, max_norm: {}",
-                    freq_vec[max_index], max_index, max_norm
-                );
+                // print!("freq: {}\r", freq_vec[max_index]);
+                // std::io::stdout().flush().expect("Failed to Flush.");
+                print_spectrum(&freq_vec, &complex_buffer[0..(BUFFER_SIZE * NUM_BUFFERS / 20)])
             }
         }
     });
-    stdin().read_line(&mut String::new()).expect("Degenerate input");
+    print!("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+    std::io::stdout().flush().expect("Failed to Flush.");
+    stdin()
+        .read_line(&mut String::new())
+        .expect("Degenerate input");
 }
