@@ -1,7 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::io::Read;
-use std::time::Duration;
 use std::{io::stdin, io::stdout, io::BufWriter, io::Write, str, sync::mpsc, thread};
 use termion::terminal_size;
 
@@ -44,7 +42,11 @@ fn print_spectrum(freq_vec: &[f32], complex_slice: &[Complex<f32>]) {
 
     for i in (0..height).rev() {
         for j in 0..width {
-            let c = if (i as f32 * scale) < bins[j] {b"#"} else {b" "};
+            let c = if (i as f32 * scale) < bins[j] {
+                b"#"
+            } else {
+                b" "
+            };
             writer.write(c).expect("Failed to write space.");
         }
         writer.write(b"\n").expect("Failed to write new line.");
@@ -86,7 +88,7 @@ fn main() {
 
     thread::spawn(move || {
         // TODO(0xff): Programmatically collect BUFFER_SIZE.
-        const BUFFER_SIZE: usize = 512;
+        const BUFFER_SIZE: usize = 2048;
         const NUM_BUFFERS: usize = 4;
 
         let mut planner = FftPlanner::new();
@@ -101,29 +103,32 @@ fn main() {
         }; BUFFER_SIZE * NUM_BUFFERS];
 
         for audio_buffer in rx {
-            let single_complex_buffer: Vec<Complex<f32>> = audio_buffer
-                .iter()
-                .step_by(num_channels)
-                .map(|x| Complex { re: *x, im: 0.0f32 })
-                .collect();
-            complex_buffer[BUFFER_SIZE * buffer_num..BUFFER_SIZE * (buffer_num + 1)]
-                .copy_from_slice(&single_complex_buffer);
-            buffer_num = (buffer_num + 1) % NUM_BUFFERS;
+            for group in audio_buffer.chunks(BUFFER_SIZE) {
+                if group.len() < BUFFER_SIZE {
+                    continue;
+                }
+                let single_complex_buffer: Vec<Complex<f32>> = group
+                    .iter()
+                    .step_by(num_channels)
+                    .map(|x| Complex { re: *x, im: 0.0f32 })
+                    .collect();
+                complex_buffer[BUFFER_SIZE * buffer_num..BUFFER_SIZE * (buffer_num + 1)]
+                    .copy_from_slice(&single_complex_buffer);
+                buffer_num = (buffer_num + 1) % NUM_BUFFERS;
 
-            if buffer_num == 0 {
-                fft.process(&mut complex_buffer);
-                // Symmetric, only need to take first half of buffer.
-                // TODO(0xff): Replace discrete max with interpolated value
-                let (max_index, max_norm) =
-                    argmax_with_max(&complex_buffer[0..BUFFER_SIZE * NUM_BUFFERS / 2]);
-                // TODO(0xff): Replace this print output with visual feedback with
-                // respect to musical notes.
-                // print!("freq: {}\r", freq_vec[max_index]);
-                // std::io::stdout().flush().expect("Failed to Flush.");
-                print_spectrum(
-                    &freq_vec,
-                    &complex_buffer[0..(BUFFER_SIZE * NUM_BUFFERS / 12)],
-                )
+                if buffer_num == 0 {
+                    fft.process(&mut complex_buffer);
+                    // Symmetric, only need to take first half of buffer.
+                    // TODO(0xff): Replace discrete max with interpolated value
+                    let (max_index, max_norm) =
+                        argmax_with_max(&complex_buffer[0..BUFFER_SIZE * NUM_BUFFERS / 2]);
+                    // TODO(0xff): Replace this print output with visual feedback with
+                    // respect to musical notes.
+                    // print!("freq: {}\r", freq_vec[max_index]);
+                    // std::io::stdout().flush().expect("Failed to Flush.");
+                    let last_frequency_index = BUFFER_SIZE / 12;
+                    print_spectrum(&freq_vec, &complex_buffer[0..last_frequency_index])
+                }
             }
         }
     });
